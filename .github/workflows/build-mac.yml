@@ -1,0 +1,71 @@
+name: Build macOS app
+on:
+  workflow_dispatch:
+  push:
+    tags: ['mac-v*']
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - { runner: macos-latest,      arch: arm64 }   # Apple Silicon
+          - { runner: macos-15-intel,    arch: x64 }     # Intel
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements.txt
+
+      - name: Refresh the UI from the live site
+        run: |
+          if curl -fsSL --max-time 30 https://isai.thirai.uk/ -o /tmp/site.html && [ "$(wc -c < /tmp/site.html)" -gt 100000 ]; then
+            cp /tmp/site.html index.html && echo "using the live site"
+          else
+            echo "keeping the committed index.html"
+          fi
+
+      - name: Icon
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/nithinana/isai-ytdlp/main/favicon.png -o build/icon.png
+          mkdir build/Isai.iconset
+          for s in 16 32 64 128 256 512; do
+            sips -z $s $s build/icon.png --out build/Isai.iconset/icon_${s}x${s}.png >/dev/null
+            sips -z $((s*2)) $((s*2)) build/icon.png --out build/Isai.iconset/icon_${s}x${s}@2x.png >/dev/null
+          done
+          iconutil -c icns build/Isai.iconset -o build/Isai.icns
+
+      - name: Get ffmpeg
+        run: |
+          mkdir -p ffmpeg
+          cp "$(python -c 'import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())')" ffmpeg/ffmpeg
+          chmod +x ffmpeg/ffmpeg
+          ./ffmpeg/ffmpeg -version | head -1
+
+      - name: Build the app
+        run: |
+          pyinstaller --noconfirm --windowed --name Isai \
+            --icon build/Isai.icns --osx-bundle-identifier uk.thirai.isai \
+            --add-data "index.html:." --add-binary "ffmpeg/ffmpeg:ffmpeg" \
+            --hidden-import backend \
+            --collect-all ytmusicapi --collect-data certifi \
+            --collect-submodules uvicorn --collect-submodules webview \
+            launcher.py
+
+      - name: Make the DMG
+        run: |
+          mkdir stage && cp -R dist/Isai.app stage/ && ln -s /Applications stage/Applications
+          hdiutil create -volname Isai -srcfolder stage -ov -format UDZO Isai-mac-${{ matrix.arch }}.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Isai-mac-${{ matrix.arch }}
+          path: Isai-mac-${{ matrix.arch }}.dmg
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Isai-mac-${{ matrix.arch }}.dmg

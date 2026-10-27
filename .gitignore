@@ -1,0 +1,5 @@
+dist
+build/*
+!build/.gitkeep
+ffmpeg
+__pycache__
