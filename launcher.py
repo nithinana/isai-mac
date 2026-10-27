@@ -3,6 +3,7 @@
 Same idea as the Windows and Android apps: the backend serves the UI and the API from one local
 address, so the app works without the shared server."""
 import os
+import re
 import sys
 import socket
 import threading
@@ -68,7 +69,11 @@ class Frontend:
         with open(os.path.join(HERE, "index.html"), "rb") as f:
             html = f.read().decode("utf-8", "replace")
         # the app talks to its own backend and counts as installed (no install banner)
-        boot = "<script>try{localStorage.setItem('base',location.origin);localStorage.setItem('installed','1')}catch(e){}</script>"
+        # The UI ignores a saved 127.0.0.1:8765 address and falls back to the public API, so change its
+        # default server to wherever it is being served from (this backend) instead.
+        html, n = re.subn(r"const defBase\s*=\s*[^;]+;", "const defBase = location.origin;", html, count=1)
+        print("[isai] default server patched" if n else "[isai] WARNING: defBase not found, UI will use the public API", flush=True)
+        boot = "<script>try{localStorage.setItem('installed','1')}catch(e){}</script>"
         i = html.lower().find("<head>")
         html = html[:i + 6] + boot + html[i + 6:] if i >= 0 else boot + html
         self.html = html.encode("utf-8")
