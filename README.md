@@ -1,7 +1,7 @@
 # Isai for macOS
 
 pywebview window + your FastAPI backend (backend.py) + bundled ffmpeg, the same design as the Windows and Android apps.
-The UI and API are both served from http://127.0.0.1:8765 inside the app.
+The UI is the live https://isai.thirai.uk/ page, fetched through the local server at http://127.0.0.1:8765 and saved to ~/Library/Application Support/Isai/index.html. Offline it opens the saved copy; back online it updates (checked on launch, on reload, and every 2 minutes). The API is served locally too.
 
 ## Build (no Mac needed)
 1. Push this folder to a GitHub repo (keep the .github folder).
